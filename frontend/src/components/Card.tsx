@@ -1,87 +1,234 @@
+import React, { useEffect, useState } from "react";
+import { cn } from "@/lib/utils";
+import Card from "@/components/Card";
 
-import React from 'react';
-import { Card as CardType } from '@/types';
-import { cn } from '@/lib/utils';
-
-interface CardProps {
-  card: CardType;
+interface GameVisualizerProps {
   className?: string;
-  flipped?: boolean;
-  animationDelay?: number;
 }
 
-const Card: React.FC<CardProps> = ({ 
-  card, 
-  className, 
-  flipped = false,
-  animationDelay = 0
-}) => {
-  const suitColor = card.suit === 'hearts' || card.suit === 'diamonds' ? 'text-red-500' : 'text-black';
-  
-  const getSuitSymbol = (suit: CardType['suit']) => {
-    switch(suit) {
-      case 'hearts': return '♥';
-      case 'diamonds': return '♦';
-      case 'clubs': return '♣';
-      case 'spades': return '♠';
+interface GameState {
+  status: "waiting" | "playing" | "completed";
+  dealerHand: any[];
+  seats: any[];
+}
+
+const GameVisualizer: React.FC<GameVisualizerProps> = ({ className }) => {
+  const [gameState, setGameState] = useState<GameState>({
+    status: "waiting",
+    dealerHand: [],
+    seats: [],
+  });
+
+  useEffect(() => {
+    const sessionId = "sFvCDXTms0DSlooZU11an7Yu8T-0OyeLUPu4uvkZkWHjDvc2JYJt!551711671-6b9105b6";
+    const tableId = "cy8me4k2b1en4r09";
+    const wsUrl = `ws://127.0.0.1:8000/api/v1/ws?session_id=${sessionId}&table_id=${tableId}`;
+
+    const ws = new WebSocket(wsUrl);
+
+    ws.onopen = () => {
+      console.log("WebSocket connection established.");
+    };
+
+    ws.onmessage = (event) => {
+      console.log("WebSocket message received:", event.data);
+      const messages = event.data.split("\n");
+      messages.forEach((message) => {
+        try {
+          const parsedMessage = JSON.parse(message);
+          console.log("Parsed message:", parsedMessage);
+          handleWebSocketMessage(parsedMessage);
+        } catch (error) {
+          console.error("Error parsing WebSocket message:", error);
+        }
+      });
+    };
+
+    ws.onerror = (error) => {
+      console.error("WebSocket error:", error);
+    };
+
+    ws.onclose = () => {
+      console.log("WebSocket connection closed.");
+    };
+
+    return () => {
+      ws.close();
+    };
+  }, []);
+
+  const handleWebSocketMessage = (message: any) => {
+    console.log("Handling WebSocket message:", message);
+    switch (message.event) {
+      case "handle_dealer":
+        console.log("Updating dealer hand:", message.data);
+        setGameState((prev) => ({
+          ...prev,
+          dealerHand: [{ name: message.data.name, id: message.data.id }],
+        }));
+        break;
+
+      case "handle_seat":
+        console.log("Updating seats:", message.data);
+        setGameState((prev) => ({
+          ...prev,
+          seats: [
+            ...prev.seats,
+            {
+              ...message.data,
+              cards: [], // Initialize cards array for the seat
+            },
+          ],
+        }));
+        break;
+
+      case "handle_card":
+        console.log("Updating cards for seat:", message.data.seat);
+        setGameState((prev) => {
+          const updatedSeats = prev.seats.map((seat) =>
+            seat.seat_number === message.data.seat
+              ? { ...seat, cards: [...(seat.cards || []), message.data] }
+              : seat
+          );
+          return { ...prev, seats: updatedSeats };
+        });
+        break;
+
+      default:
+        console.warn("Unhandled event type:", message.event);
     }
   };
-  
+
   return (
-    <div 
+    <div
       className={cn(
-        'relative w-20 h-32 perspective-1000 transform transition-transform',
-        flipped && 'rotate-y-180',
+        "glass-panel rounded-xl overflow-hidden animate-slide-up shadow-xl",
+        "transition-all duration-300 border-2 border-neutral-200/40 dark:border-neutral-800/40",
         className
       )}
-      style={{ 
-        transformStyle: 'preserve-3d',
-        animation: `fade-in 0.3s ease-out forwards`,
-        animationDelay: `${animationDelay}s`
-      }}
     >
-      {/* Card Front */}
-      <div 
-        className={cn(
-          'absolute w-full h-full rounded-lg bg-white shadow-md p-2 flex flex-col justify-between card-face',
-          'border border-gray-200 transition-all duration-300'
-        )}
-      >
-        {!card.hidden && (
-          <>
-            <div className={cn('flex justify-between items-center', suitColor)}>
-              <span className="text-lg font-medium">{card.rank}</span>
-              <span className="text-lg">{getSuitSymbol(card.suit)}</span>
-            </div>
-            <div className={cn('text-4xl flex justify-center items-center', suitColor)}>
-              {getSuitSymbol(card.suit)}
-            </div>
-            <div className={cn('flex justify-between items-center rotate-180', suitColor)}>
-              <span className="text-lg font-medium">{card.rank}</span>
-              <span className="text-lg">{getSuitSymbol(card.suit)}</span>
-            </div>
-          </>
-        )}
-        {card.hidden && (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="text-gray-400 text-xl">?</div>
-          </div>
-        )}
+      <div className="p-3 bg-neutral-100 dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-800 flex justify-between items-center">
+        <h2 className="text-sm font-medium text-neutral-800 dark:text-neutral-200">
+          Live Blackjack Table
+        </h2>
+        <div className="text-xs text-neutral-500 dark:text-neutral-400">
+          {gameState.status === "playing" ? "Game in Progress" : "Table View"}
+        </div>
       </div>
-      
-      {/* Card Back */}
-      <div 
-        className={cn(
-          'absolute w-full h-full rounded-lg bg-gradient-to-br from-blue-500 to-blue-700 p-2 card-face card-back',
-          'border border-blue-600 shadow-md'
-        )}
-      >
-        <div className="w-full h-full border-2 border-white/30 rounded flex items-center justify-center">
-          <div className="text-white text-opacity-70 text-2xl">♠️</div>
+
+      <div className="relative min-h-[420px] p-6">
+        {/* Dealer area */}
+        <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-full text-center z-10">
+          <div className="text-xs text-neutral-500 dark:text-neutral-400 mb-1 font-medium">
+            DEALER
+          </div>
+          <div className="flex justify-center">
+            {gameState.dealerHand.map((card, index) => (
+              <Card
+                key={`dealer-${index}`}
+                card={card}
+                className="transform scale-75 -ml-10 first:ml-0 border border-white/10 shadow-md"
+                animationDelay={index * 0.1}
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* Players */}
+        <div className="absolute top-[60px] left-0 w-[40%]">
+          {gameState.seats.slice(0, 3).map((seat, playerIndex) => (
+            <div
+              key={`left-player-${playerIndex}`}
+              className="absolute"
+              style={{
+                top: `${playerIndex * 70}px`,
+                left: `${10 + playerIndex * 80}px`,
+              }}
+            >
+              <div
+                className="text-[10px] text-neutral-500 dark:text-neutral-400 mb-1"
+                style={{
+                  position: "relative",
+                  top: "45px",
+                  left: "25px",
+                }}
+              >
+                {seat.screen_name || `PLAYER ${playerIndex + 1}`}
+              </div>
+              <div className="flex flex-row">
+                {seat.cards?.map((card, cardIndex) => (
+                  <Card
+                    key={`left-player-${playerIndex}-card-${cardIndex}`}
+                    card={card}
+                    className="transform scale-[0.4] -ml-[52px] first:ml-0 border border-white/10 shadow-sm"
+                    animationDelay={cardIndex * 0.05}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Right side players */}
+        <div className="absolute top-[60px] right-0 w-[40%]">
+          {gameState.seats.slice(3, 6).map((seat, playerIndex) => (
+            <div
+              key={`right-player-${playerIndex}`}
+              className="absolute"
+              style={{
+                top: `${playerIndex * 70}px`,
+                right: `${10 + playerIndex * 80}px`,
+              }}
+            >
+              <div
+                className="text-[10px] text-neutral-500 dark:text-neutral-400 mb-1"
+                style={{
+                  position: "relative",
+                  top: "45px",
+                  left: "25px",
+                }}
+              >
+                {seat.screen_name || `PLAYER ${playerIndex + 4}`}
+              </div>
+              <div className="flex flex-row justify-end">
+                {seat.cards?.map((card, cardIndex) => (
+                  <Card
+                    key={`right-player-${playerIndex}-card-${cardIndex}`}
+                    card={card}
+                    className="transform scale-[0.4] -mr-[52px] last:mr-0 border border-white/10 shadow-sm"
+                    animationDelay={cardIndex * 0.05}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Main player (seat 0) - bottom center */}
+        <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-full text-center z-10">
+          {gameState.seats
+            .filter((seat) => seat.seat_number === 0)
+            .map((seat, index) => (
+              <div key={`main-player-${index}`}>
+                <div className="text-xs text-neutral-600 dark:text-neutral-300 mb-1 font-medium">
+                  YOU
+                </div>
+                <div className="flex justify-center gap-1">
+                  {seat.cards?.map((card, cardIndex) => (
+                    <Card
+                      key={`main-player-card-${cardIndex}`}
+                      card={card}
+                      className="transform scale-75 -ml-4 first:ml-0 border border-white/10 shadow-md"
+                      animationDelay={cardIndex * 0.1}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
         </div>
       </div>
     </div>
   );
 };
 
-export default Card;
+export default GameVisualizer;
