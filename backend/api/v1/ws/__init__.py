@@ -12,8 +12,8 @@ async def websocket_endpoint(
         table_id: str,
         websocket: WebSocket,
         background_task: BackgroundTasks,
-        min_bet: int=5,
-        max_bet: int=5,
+        min_bet: int = 5,
+        max_bet: int = 5,
 ):
     table = Table(table_id, session_id)
     await websocket.accept()

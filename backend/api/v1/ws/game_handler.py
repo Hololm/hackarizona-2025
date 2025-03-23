@@ -4,12 +4,13 @@ import boto3
 import pickle
 import os
 from dotenv import load_dotenv
-from pragmatic_blackjack import HandlerBase, BetsOpen, Subscribe, DecisionInc, Decision, Card, event
+from pragmatic_blackjack import HandlerBase, BetsOpen, Subscribe, DecisionInc
 from pragmatic_blackjack.event import Seat as SeatEvent
 from pragmatic_blackjack.seat import Seat
 
 
 load_dotenv()
+
 
 class GameHandler(HandlerBase):
     def __init__(self, table, websocket, min_bet, max_bet):
@@ -22,14 +23,8 @@ class GameHandler(HandlerBase):
 
         self.seats: list[SeatEvent] = []
         self.seat: Seat | None = None
-        self.q_table = None
-        self.has_ace = False
 
-        self.s3_bucket = os.getenv('S3_BUCKET')
-        self.s3_key = os.getenv('S3_KEY')
-
-        self.aws_key = os.getenv('AWS_ACCESS_KEY_ID')
-        self.aws_secret_key = os.getenv('AWS_SECRET_ACCESS_KEY')
+        self.q_table = self.load_trained_model()
 
 
     @property
@@ -56,17 +51,17 @@ class GameHandler(HandlerBase):
 
     def load_trained_model(self):
         """Load the trained Q-table from S3."""
-        if self.aws_key and self.aws_secret_key:
-            s3 = boto3.client('s3')
-            obj = s3.get_object(Bucket=self.s3_bucket, Key=self.s3_key)
-            data = obj['Body'].read()
-            self.q_table = pickle.loads(data)
+        if not os.getenv('AWS_ACCESS_KEY_ID') or not os.getenv('AWS_SECRET_ACCESS_KEY'):
+            raise ValueError("AWS credentials not found.")
+
+        s3 = boto3.client('s3')
+        obj = s3.get_object(Bucket=os.getenv('S3_BUCKET'), Key=os.getenv('S3_KEY'))
+        data = obj['Body'].read()
+        return pickle.loads(data)
 
     def handle_decision_inc(self, event: DecisionInc, raw: str = None):
         if not self.seat == event.seat:
             return
-
-        self.load_trained_model()
 
         dealer_upcard = event.dealer_score
         player_score = event.score
