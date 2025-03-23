@@ -9,10 +9,15 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { toast } from 'sonner';
+import { debounce } from 'lodash-es';
 
 interface ControlPanelProps {
   className?: string;
 }
+
+const debouncedUpdate = debounce((value: number) => {
+  updateSettingsMutation.mutate({ betAmount: value });
+}, 300);
 
 const ControlPanel: React.FC<ControlPanelProps> = ({ className }) => {
   const queryClient = useQueryClient();
@@ -84,8 +89,11 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ className }) => {
   };
   
   const handleBetAmountChange = (value: number[]) => {
-    updateSettingsMutation.mutate({ betAmount: value[0] });
-  };
+  // Update local UI immediately
+  setLocalBetAmount(value[0]); // Add useState for local state
+  // Debounced API update
+  debouncedUpdate(value[0]);
+};
   
   const handleStrategyChange = (strategy: 'basic' | 'aggressive' | 'conservative') => {
     updateSettingsMutation.mutate({ strategy });
@@ -163,7 +171,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ className }) => {
             <div className="space-y-3">
               <div className="flex justify-between items-center">
                 <span className="text-sm text-muted-foreground">Bet Amount:</span>
-                <span className="text-sm font-medium">{settings.betAmount} coins</span>
+                <span className="text-sm font-medium">${settings.betAmount}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-sm text-muted-foreground">Strategy:</span>
@@ -199,12 +207,12 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ className }) => {
                   min={1}
                   max={100}
                   step={1}
-                  onValueCommit={handleBetAmountChange}
+                  onValueChange={handleBetAmountChange}
                 />
                 <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>1</span>
-                  <span>{settings.betAmount} coins</span>
-                  <span>100</span>
+                  <span>$1</span>
+                  <span>${settings.betAmount}</span>
+                  <span>$100</span>
                 </div>
               </div>
             </div>

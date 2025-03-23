@@ -79,33 +79,9 @@ class GameHandler(HandlerBase):
 
         # Standard Blackjack action space
         decision_map = {
-            0: "Hit",
-            1: "Stand",
-            2: "Double down" if event.can_double else "Hit",
-            3: "Split" if event.can_split else "Hit"
+            0: self.seat.hit,
+            1: self.seat.stand,
+            2: self.seat.double if event.can_double else self.seat.hit,
         }
 
-        decision = decision_map[action]
-
-        self.handle_decision(Decision(
-            decision=decision,
-            seat=self.seat.seat_number,
-            game=event.game,
-            code=event.code,
-            action='',
-            hand=event.hand,
-        ))
-
-
-    def handle_decision(self, event: Decision, raw: str = None):
-        """Send decision to game server"""
-        print(f"Decision: {event.decision}")
-        asyncio.create_task(self.websocket.send_json({
-            "event": "decision",
-            "data": {
-                "decision": event.decision
-            }
-        }))
-
-# Create a GameHandler instance
-handler = GameHandler(None, None, 5, 5)
+        decision_map[action]()
