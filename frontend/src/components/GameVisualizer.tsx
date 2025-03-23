@@ -157,7 +157,7 @@ const GameVisualizer: React.FC<GameVisualizerProps> = ({ className }) => {
                   className="text-[10px] text-neutral-500 dark:text-neutral-400 mb-1"
                   style={{
                     position: "relative",
-                    top: "45px", // Move name down slightly
+                    top: "45px", // Move name down
                     left: "25px", // Move name right
                   }}
                 >
@@ -192,7 +192,7 @@ const GameVisualizer: React.FC<GameVisualizerProps> = ({ className }) => {
                 <div className="text-[10px] text-neutral-500 dark:text-neutral-400 mb-1"
                 style={{
                     position: "relative",
-                    top: "45px", // Move name down slightly
+                    top: "45px", // Move name down
                     left: "25px", // Move name right
                   }}
                 >
