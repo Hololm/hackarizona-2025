@@ -1,6 +1,4 @@
-import React from "react";
-import { useQuery } from "@tanstack/react-query";
-import { api } from "@/utils/api";
+import React, { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import Card from "@/components/Card";
 
@@ -8,80 +6,101 @@ interface GameVisualizerProps {
   className?: string;
 }
 
+interface GameState {
+  status: "waiting" | "playing" | "completed";
+  dealerHand: any[];
+  seats: any[];
+}
+
 const GameVisualizer: React.FC<GameVisualizerProps> = ({ className }) => {
-  const { data: gameState, isLoading } = useQuery({
-    queryKey: ["gameState"],
-    queryFn: api.getGameState,
-    refetchInterval: 1000,
+  const [gameState, setGameState] = useState<GameState>({
+    status: "waiting",
+    dealerHand: [],
+    seats: [],
   });
 
-  if (isLoading || !gameState) {
-    return (
-      <div
-        className={cn(
-          "glass-panel rounded-xl p-6 animate-pulse min-h-[300px] flex items-center justify-center",
-          className
-        )}
-      >
-        <div className="text-center text-muted-foreground">
-          Loading game visualizer...
-        </div>
-      </div>
-    );
-  }
+  useEffect(() => {
+    const sessionId = "Y43CF1lOp5jrEDGAFf7cTMJeHPwsm8EZlCTNMlHuilieyLryQuUs!1225057540-b01c23b6";
+    const tableId = "cy8me4k2b1en4r09";
+    const wsUrl = `ws://127.0.0.1:8000/api/v1/ws?session_id=${sessionId}&table_id=${tableId}`;
 
-  const getTableStateClass = () => {
-    if (gameState.status === "waiting")
-      return "bg-neutral-100/80 dark:bg-neutral-900/80";
-    if (gameState.status === "completed") {
-      if (gameState.result === "win")
-        return "bg-neutral-100/80 dark:bg-neutral-900/80";
-      if (gameState.result === "lose")
-        return "bg-neutral-100/80 dark:bg-neutral-900/80";
-      if (gameState.result === "push")
-        return "bg-neutral-100/80 dark:bg-neutral-900/80";
-    }
-    return "bg-neutral-100/80 dark:bg-neutral-900/80";
-  };
+    const ws = new WebSocket(wsUrl);
 
-  const generateOtherPlayerHands = () => {
-    const otherPlayers = [];
+    ws.onopen = () => {
+      console.log("WebSocket connection established.");
+    };
 
-    for (let i = 0; i < 6; i++) {
-      const cardCount = Math.floor(Math.random() * 3) + 2;
-      const hand = [];
+    ws.onmessage = (event) => {
+      console.log("WebSocket message received:", event.data);
+      const messages = event.data.split("\n");
+      messages.forEach((message) => {
+        try {
+          const parsedMessage = JSON.parse(message);
+          console.log("Parsed message:", parsedMessage);
+          handleWebSocketMessage(parsedMessage);
+        } catch (error) {
+          console.error("Error parsing WebSocket message:", error);
+        }
+      });
+    };
 
-      for (let j = 0; j < cardCount; j++) {
-        hand.push({
-          suit: ["hearts", "diamonds", "clubs", "spades"][
-            Math.floor(Math.random() * 4)
+    ws.onerror = (error) => {
+      console.error("WebSocket error:", error);
+    };
+
+    ws.onclose = () => {
+      console.log("WebSocket connection closed.");
+    };
+
+    return () => {
+      ws.close();
+    };
+  }, []);
+
+  const handleWebSocketMessage = (message: any) => {
+    console.log("Handling WebSocket message:", message);
+    switch (message.event) {
+      case "handle_dealer":
+        console.log("Updating dealer hand:", message.data);
+        setGameState((prev) => ({
+          ...prev,
+          dealerHand: [{ name: message.data.name, id: message.data.id }],
+        }));
+        break;
+
+      case "handle_seat":
+        console.log("Updating seats:", message.data);
+        setGameState((prev) => ({
+          ...prev,
+          seats: [
+            ...prev.seats,
+            {
+              ...message.data,
+              cards: [],
+            },
           ],
-          rank: [
-            "A",
-            "2",
-            "3",
-            "4",
-            "5",
-            "6",
-            "7",
-            "8",
-            "9",
-            "10",
-            "J",
-            "Q",
-            "K",
-          ][Math.floor(Math.random() * 13)],
-          hidden: false,
+        }));
+        break;
+
+      case "handle_card":
+        console.log("Updating cards for seat:", message.data.seat);
+        setGameState((prev) => {
+          const updatedSeats = prev.seats.map((seat) =>
+            seat.seat_number === message.data.seat
+              ? { ...seat, cards: [...(seat.cards || []), message.data] }
+              : seat
+          );
+          return { ...prev, seats: updatedSeats };
         });
-      }
+        break;
 
-      otherPlayers.push(hand);
+      default:
+        console.warn("Unhandled event type:", message.event);
     }
-
-    return otherPlayers;
   };
 
-  const otherPlayerHands = generateOtherPlayerHands();
+  // Find your seat (seat number 0)
+  const yourSeat = gameState.seats.find((seat) => seat.seat_number === 0);
 
   return (
     <div
@@ -100,51 +119,59 @@ const GameVisualizer: React.FC<GameVisualizerProps> = ({ className }) => {
         </div>
       </div>
 
-      <div
-        className={cn(
-          "relative min-h-[420px] p-6",
-          "transition-colors duration-500",
-          getTableStateClass()
-        )}
-      >
-        {/* Table border pattern */}
-        <div className="absolute inset-0 overflow-hidden">
-          <div className="w-full h-full rounded-b-xl border-8 border-neutral-200 dark:border-neutral-800/40 flex items-center justify-center">
-            <div className="w-[98%] h-[97%] rounded-[100%] border-2 border-neutral-300/20 dark:border-neutral-700/20"></div>
+      <div className="relative min-h-[420px] p-6">
+        {/* Dealer area */}
+        <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-full text-center z-10">
+          <div className="text-xs text-neutral-500 dark:text-neutral-400 mb-1 font-medium">
+            DEALER
+          </div>
+          <div className="flex justify-center">
+            {gameState.dealerHand.map((card, index) => (
+              <Card
+                key={`dealer-${index}`}
+                card={card}
+                className="transform scale-75 -ml-10 first:ml-0 border border-white/10 shadow-md"
+                animationDelay={index * 0.1}
+              />
+            ))}
           </div>
         </div>
 
-        {/* Casino table emblem */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-neutral-300/20 dark:text-neutral-700/20 text-sm font-serif tracking-widest pointer-events-none">
-          BLACKJACK PAYS 3 TO 2
-        </div>
-
-        <div className="absolute top-[40%] left-1/2 -translate-x-1/2 -translate-y-1/2 text-neutral-300/20 dark:text-neutral-700/20 text-xs font-serif tracking-widest pointer-events-none rotate-180">
-          DEALER MUST STAND ON 17
-        </div>
-
-        {/* Semi-circular table layout */}
-        <div className="relative w-full h-[320px] mt-8">
-          {/* Dealer area - top center */}
-          <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-full text-center z-10">
-            <div className="text-xs text-neutral-500 dark:text-neutral-400 mb-1 font-medium">
-              DEALER
+        {/* Your seat (seat number 0) */}
+        {yourSeat && (
+          <div
+            className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-full text-center z-10"
+            style={{ bottom: "20px" }} // Adjust position as needed
+          >
+            <div
+              className="text-[10px] text-neutral-500 dark:text-neutral-400 mb-1"
+              style={{
+                position: "relative",
+                top: "45px",
+                left: "25px",
+              }}
+            >
+              YOU
             </div>
             <div className="flex justify-center">
-              {gameState.dealerHand.map((card, index) => (
+              {yourSeat.cards?.map((card, cardIndex) => (
                 <Card
-                  key={`dealer-${index}`}
+                  key={`your-seat-card-${cardIndex}`}
                   card={card}
-                  className="transform scale-75 -ml-10 first:ml-0 border border-white/10 shadow-md"
-                  animationDelay={index * 0.1}
+                  className="transform scale-75 -ml-4 first:ml-0 border border-white/10 shadow-md"
+                  animationDelay={cardIndex * 0.1}
                 />
               ))}
             </div>
           </div>
+        )}
 
-          {/* Left side players - positioned in semi-circular arc */}
-          <div className="absolute top-[60px] left-0 w-[40%]">
-            {otherPlayerHands.slice(0, 3).map((hand, playerIndex) => (
+        {/* Other players */}
+        <div className="absolute top-[60px] left-0 w-[40%]">
+          {gameState.seats
+            .filter((seat) => seat.seat_number !== 0) // Exclude your seat
+            .slice(0, 3)
+            .map((seat, playerIndex) => (
               <div
                 key={`left-player-${playerIndex}`}
                 className="absolute"
@@ -157,15 +184,14 @@ const GameVisualizer: React.FC<GameVisualizerProps> = ({ className }) => {
                   className="text-[10px] text-neutral-500 dark:text-neutral-400 mb-1"
                   style={{
                     position: "relative",
-                    top: "45px", // Move name down
-                    left: "25px", // Move name right
+                    top: "45px",
+                    left: "25px",
                   }}
                 >
-                  PLAYER {playerIndex + 1}
+                  {seat.screen_name || `PLAYER ${playerIndex + 1}`}
                 </div>
-
                 <div className="flex flex-row">
-                  {hand.map((card, cardIndex) => (
+                  {seat.cards?.map((card, cardIndex) => (
                     <Card
                       key={`left-player-${playerIndex}-card-${cardIndex}`}
                       card={card}
@@ -176,11 +202,14 @@ const GameVisualizer: React.FC<GameVisualizerProps> = ({ className }) => {
                 </div>
               </div>
             ))}
-          </div>
+        </div>
 
-          {/* Right side players - positioned in semi-circular arc */}
-          <div className="absolute top-[60px] right-0 w-[40%]">
-            {otherPlayerHands.slice(3, 6).map((hand, playerIndex) => (
+        {/* Right side players */}
+        <div className="absolute top-[60px] right-0 w-[40%]">
+          {gameState.seats
+            .filter((seat) => seat.seat_number !== 0) // Exclude your seat
+            .slice(3, 6)
+            .map((seat, playerIndex) => (
               <div
                 key={`right-player-${playerIndex}`}
                 className="absolute"
@@ -189,17 +218,18 @@ const GameVisualizer: React.FC<GameVisualizerProps> = ({ className }) => {
                   right: `${10 + playerIndex * 80}px`,
                 }}
               >
-                <div className="text-[10px] text-neutral-500 dark:text-neutral-400 mb-1"
-                style={{
+                <div
+                  className="text-[10px] text-neutral-500 dark:text-neutral-400 mb-1"
+                  style={{
                     position: "relative",
-                    top: "45px", // Move name down
-                    left: "25px", // Move name right
+                    top: "45px",
+                    left: "25px",
                   }}
                 >
-                  PLAYER {playerIndex + 4}
+                  {seat.screen_name || `PLAYER ${playerIndex + 4}`}
                 </div>
                 <div className="flex flex-row justify-end">
-                  {hand.map((card, cardIndex) => (
+                  {seat.cards?.map((card, cardIndex) => (
                     <Card
                       key={`right-player-${playerIndex}-card-${cardIndex}`}
                       card={card}
@@ -210,58 +240,6 @@ const GameVisualizer: React.FC<GameVisualizerProps> = ({ className }) => {
                 </div>
               </div>
             ))}
-          </div>
-
-          {/* Game status indicator - center of table */}
-          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-20">
-            <div className="py-2 px-5 rounded-full bg-neutral-100/30 dark:bg-neutral-900/30 backdrop-blur-sm shadow-sm border border-neutral-300/20 dark:border-neutral-700/20 text-center">
-              {gameState.status === "waiting" && (
-                <div className="text-xs text-neutral-600 dark:text-neutral-300">
-                  PLACE YOUR BET
-                </div>
-              )}
-              {gameState.status === "playing" && (
-                <div className="text-xs text-neutral-600 dark:text-neutral-300 font-medium">
-                  IN PLAY
-                </div>
-              )}
-              {gameState.status === "completed" && (
-                <div
-                  className={cn(
-                    "text-xs font-medium",
-                    gameState.result === "win"
-                      ? "text-green-600 dark:text-green-400"
-                      : gameState.result === "lose"
-                      ? "text-red-600 dark:text-red-400"
-                      : "text-neutral-600 dark:text-neutral-300"
-                  )}
-                >
-                  {gameState.result === "win"
-                    ? "YOU WIN!"
-                    : gameState.result === "lose"
-                    ? "DEALER WINS"
-                    : "PUSH"}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Main player - bottom center */}
-          <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-full text-center z-10">
-            <div className="flex justify-center gap-1">
-              {gameState.playerHand.map((card, index) => (
-                <Card
-                  key={`player-${index}`}
-                  card={card}
-                  className="transform scale-75 -ml-4 first:ml-0 border border-white/10 shadow-md"
-                  animationDelay={index * 0.1}
-                />
-              ))}
-            </div>
-            <div className="text-xs text-neutral-600 dark:text-neutral-300 mt-2 font-medium">
-              YOU
-            </div>
-          </div>
         </div>
       </div>
     </div>
