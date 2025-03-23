@@ -4,8 +4,7 @@ import boto3
 import pickle
 import os
 from dotenv import load_dotenv
-from typing import Optional, Dict, Tuple
-from pragmatic_blackjack import HandlerBase, BetsOpen, Subscribe, DecisionInc, Decision, Card
+from pragmatic_blackjack import HandlerBase, BetsOpen, Subscribe, DecisionInc, Decision, Card, event
 from pragmatic_blackjack.event import Seat as SeatEvent
 from pragmatic_blackjack.seat import Seat
 
@@ -23,7 +22,7 @@ class GameHandler(HandlerBase):
 
         self.seats: list[SeatEvent] = []
         self.seat: Seat | None = None
-        self.q_table: Dict[Tuple[int, bool, int], np.ndarray] = {}
+        self.q_table = None
         self.has_ace = False
 
         self.s3_bucket = os.getenv('S3_BUCKET')
@@ -61,63 +60,52 @@ class GameHandler(HandlerBase):
             s3 = boto3.client('s3')
             obj = s3.get_object(Bucket=self.s3_bucket, Key=self.s3_key)
             data = obj['Body'].read()
-            q_table = pickle.loads(data)
-
-            return q_table
+            self.q_table = pickle.loads(data)
 
     def handle_decision_inc(self, event: DecisionInc, raw: str = None):
         if not self.seat == event.seat:
             return
 
-        # Extract necessary values from the event
-        dealer_upcard = int(event.dealer_score) if event.dealer_score else 0
-        player_score = int(event.score)
-        is_soft = self.handle_card(event)  # Check if the hand is soft (contains an Ace)
+        self.load_trained_model()
 
-        # Create state tuple for Q-table lookup
-        state = (player_score, is_soft, dealer_upcard)
+        dealer_upcard = event.dealer_score
+        player_score = event.score
 
-        # Get action from Q-table with fallback to zeros if state isn't found
-        action = np.argmax(self.q_table.get(state, np.zeros(3)))
+        state = (player_score, dealer_upcard, int(event.can_split))
 
-        # Map action index to decision string
-        decisions = {
+        # Get action with fallback
+        action_values = self.q_table.get(state, np.zeros(4))  # Standard 4 actions
+        action = np.argmax(action_values)
+
+        # Standard Blackjack action space
+        decision_map = {
             0: "Hit",
             1: "Stand",
-            2: "Double down" if event.can_double else "Hit"
+            2: "Double down" if event.can_double else "Hit",
+            3: "Split" if event.can_split else "Hit"
         }
-        decision = decisions[action]
 
-        # Handle splits if applicable
-        if event.can_split and player_score in [4, 6, 8, 12, 14, 16, 18]:  # Pairs that might be split
-            decision = "Split"
+        decision = decision_map[action]
 
-        # Send the decision to handle_decision
-        self.handle_decision(
-            Decision(
-                seat=event.seat, game=event.game,
-                code=0, action="playerCall",
-                hand=event.hand, decision=decision
-            )
-        )
+        self.handle_decision(Decision(
+            decision=decision,
+            seat=self.seat.seat_number,
+            game=event.game,
+            code=event.code,
+            action='',
+            hand=event.hand,
+        ))
 
-    def handle_card(self, event: Card, raw: str = None):
-        """Check if the hand contains an Ace."""
-        if self.seat == event.seat:
-            return 'A' in event.sc.upper()  # Returns True if card contains 'A'
 
     def handle_decision(self, event: Decision, raw: str = None):
-        """Send the decision to the game server via websocket."""
-        print(f"Decision made: {event.decision}")
+        """Send decision to game server"""
+        print(f"Decision: {event.decision}")
+        asyncio.create_task(self.websocket.send_json({
+            "event": "decision",
+            "data": {
+                "decision": event.decision
+            }
+        }))
 
-        data = {
-        "event": "decision",
-        "data": {
-            "seat": event.seat,
-            "game": event.game,
-            "action": event.action,  # Changed from "playerCall"
-            "hand": event.hand,
-            "decision": event.decision
-        }
-    }
-        asyncio.create_task(self.websocket.send_json(data))
+# Create a GameHandler instance
+handler = GameHandler(None, None, 5, 5)
