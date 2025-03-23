@@ -1,28 +1,33 @@
-from fastapi import FastAPI, WebSocket, APIRouter
-from ...core.session import active_sessions
+from fastapi import WebSocket, APIRouter, WebSocketDisconnect
+from pragmatic_blackjack import Table, Event
+import asyncio
+from .game_handler import GameHandler
 
 router = APIRouter()
 
 
-@router.websocket("/ws")
+@router.websocket("/v1/ws")
 async def websocket_endpoint(
         session_id: str,
+        table_id: str,
         websocket: WebSocket
 ):
+    table = Table(table_id, session_id)
     await websocket.accept()
 
-    if session_id not in active_sessions:
-        await websocket.close()
-        return
+    def transfer_messages(event: Event):
+        data = event.model_dump_json()
+        asyncio.create_task(websocket.send_text(data))
 
-    session = active_sessions[session_id]
-    session.websocket = websocket
+    table.handle_all(transfer_messages)
 
-    while True:
-        await websocket.receive_text()
+    handler = GameHandler()
+    table.register(handler)
 
-        message = None  #: should be Dealer dataclass
-        #: serialize message to JSON
-        #: send message to client
+    asyncio.create_task(table.connect())
 
-        await websocket.send_text()
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        table.disconnect()
