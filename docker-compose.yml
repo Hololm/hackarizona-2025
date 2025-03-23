@@ -5,6 +5,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+    image: 033303108318.dkr.ecr.us-west-2.amazonaws.com/pragmatic/frontend
     ports:
       - "3000:3000"
 
@@ -12,6 +13,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    image: 033303108318.dkr.ecr.us-west-2.amazonaws.com/pragmatic/backend
     ports:
       - "8000:8000"
     depends_on:
