@@ -15,14 +15,3 @@ async def websocket_endpoint(websocket: WebSocket):
         #: send message to client
 
         await websocket.send_text()
-
-
-response = websocket_endpoint('/ws')
-
-response.id
-
-
-    {
-        id = 123,
-        name = 'dealer',
-    }
