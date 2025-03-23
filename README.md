@@ -3,6 +3,16 @@
 
 Automate playing blackjack on Pragmatic Blackjack tables using basic strategy & card counting
 
+[Video Demo]([https://youtu.be/J1qgNPgmSLI](https://youtu.be/KqIskupSdAc))
+
+![homeharvest](https://github.com/user-attachments/assets/bdf4a3bb-6002-4fc2-8b8b-15f3faf443e3)
+
+
+
+
+
+
+
 
 ## Deployment
 
