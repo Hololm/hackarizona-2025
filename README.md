@@ -26,8 +26,6 @@ npm run dev
 
 # Step 6: Start the backend
 uvicorn backend.main:app --reload
-```## WebSocket Integration
-The WebSocket connection is established using the following format:
 ```
 
 ### WebSocket Events
