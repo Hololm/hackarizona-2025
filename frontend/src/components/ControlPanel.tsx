@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/utils/api';
 import { cn } from '@/lib/utils';
@@ -15,19 +15,22 @@ interface ControlPanelProps {
   className?: string;
 }
 
-const debouncedUpdate = debounce((value: number) => {
-  updateSettingsMutation.mutate({ betAmount: value });
-}, 300);
-
 const ControlPanel: React.FC<ControlPanelProps> = ({ className }) => {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<string>('controls');
-  
+  const [localBetAmount, setLocalBetAmount] = useState<number>(1);
+
   const { data: settings, isLoading } = useQuery({
     queryKey: ['settings'],
     queryFn: api.getSettings,
   });
-  
+
+  useEffect(() => {
+    if (settings) {
+      setLocalBetAmount(settings.betAmount);
+    }
+  }, [settings]);
+
   const startMutation = useMutation({
     mutationFn: api.startAI,
     onSuccess: () => {
@@ -40,7 +43,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ className }) => {
       toast.error('Failed to start AI');
     },
   });
-  
+
   const stopMutation = useMutation({
     mutationFn: api.stopAI,
     onSuccess: () => {
@@ -53,7 +56,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ className }) => {
       toast.error('Failed to stop AI');
     },
   });
-  
+
   const updateSettingsMutation = useMutation({
     mutationFn: api.updateSettings,
     onSuccess: () => {
@@ -66,7 +69,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ className }) => {
       toast.error('Failed to update settings');
     },
   });
-  
+
   const resetStatisticsMutation = useMutation({
     mutationFn: api.resetStatistics,
     onSuccess: () => {
@@ -79,34 +82,43 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ className }) => {
       toast.error('Failed to reset statistics');
     },
   });
-  
+
+  const debouncedUpdate = useCallback(
+    debounce((value: number) => {
+      updateSettingsMutation.mutate({ betAmount: value });
+    }, 300),
+    [updateSettingsMutation]
+  );
+
+  useEffect(() => {
+    return () => debouncedUpdate.cancel();
+  }, [debouncedUpdate]);
+
   const handleStartAI = () => {
     startMutation.mutate({});
   };
-  
+
   const handleStopAI = () => {
     stopMutation.mutate();
   };
-  
+
   const handleBetAmountChange = (value: number[]) => {
-  // Update local UI immediately
-  setLocalBetAmount(value[0]); // Add useState for local state
-  // Debounced API update
-  debouncedUpdate(value[0]);
-};
-  
+    setLocalBetAmount(value[0]);
+    debouncedUpdate(value[0]);
+  };
+
   const handleStrategyChange = (strategy: 'basic' | 'aggressive' | 'conservative') => {
     updateSettingsMutation.mutate({ strategy });
   };
-  
+
   const handleAutoRestartChange = (autoRestart: boolean) => {
     updateSettingsMutation.mutate({ autoRestart });
   };
-  
+
   const handleResetStatistics = () => {
     resetStatisticsMutation.mutate();
   };
-  
+
   if (isLoading || !settings) {
     return (
       <div className={cn('glass-panel rounded-xl p-6 animate-pulse', className)}>
@@ -114,15 +126,15 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ className }) => {
       </div>
     );
   }
-  
+
   return (
     <div className={cn(
       'glass-panel rounded-xl p-6 animate-slide-up',
       'transition-all duration-300',
       className
     )}>
-      <Tabs 
-        defaultValue="controls" 
+      <Tabs
+        defaultValue="controls"
         value={activeTab}
         onValueChange={setActiveTab}
         className="w-full"
@@ -131,7 +143,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ className }) => {
           <TabsTrigger value="controls">Controls</TabsTrigger>
           <TabsTrigger value="settings">Settings</TabsTrigger>
         </TabsList>
-        
+
         <TabsContent value="controls" className="space-y-6">
           <div className="flex items-center justify-center">
             <div className={cn(
@@ -143,7 +155,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ className }) => {
               {settings.isRunning ? 'AI is Running' : 'AI is Stopped'}
             </div>
           </div>
-          
+
           <div className="grid grid-cols-2 gap-3">
             <Button
               variant="default"
@@ -154,7 +166,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ className }) => {
             >
               {startMutation.isPending ? 'Starting...' : 'Start AI'}
             </Button>
-            
+
             <Button
               variant="outline"
               size="lg"
@@ -165,7 +177,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ className }) => {
               {stopMutation.isPending ? 'Stopping...' : 'Stop AI'}
             </Button>
           </div>
-          
+
           <div className="pt-4 border-t">
             <h3 className="text-sm font-medium mb-3">Current Settings</h3>
             <div className="space-y-3">
@@ -183,11 +195,11 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ className }) => {
               </div>
             </div>
           </div>
-          
+
           <div className="pt-4 border-t">
-            <Button 
-              variant="ghost" 
-              size="sm" 
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={handleResetStatistics}
               disabled={resetStatisticsMutation.isPending}
               className="w-full text-muted-foreground hover:text-foreground transition-colors"
@@ -196,14 +208,14 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ className }) => {
             </Button>
           </div>
         </TabsContent>
-        
+
         <TabsContent value="settings" className="space-y-6">
           <div className="space-y-6">
             <div className="space-y-3">
               <h3 className="text-sm font-medium">Bet Amount</h3>
               <div className="space-y-3">
                 <Slider
-                  defaultValue={[settings.betAmount]}
+                  value={[localBetAmount]}
                   min={1}
                   max={100}
                   step={1}
@@ -211,7 +223,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ className }) => {
                 />
                 <div className="flex justify-between text-xs text-muted-foreground">
                   <span>$1</span>
-                  <span>${settings.betAmount}</span>
+                  <span>${localBetAmount}</span>
                   <span>$100</span>
                 </div>
               </div>
