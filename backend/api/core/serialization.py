@@ -2,6 +2,8 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, asdict
 from typing import TYPE_CHECKING
+
+
 if TYPE_CHECKING:
     from _typeshed import DataclassInstance
 
